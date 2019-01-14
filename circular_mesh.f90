@@ -133,10 +133,10 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     mask_phi = ishft(iand(tetra_conf, 4), -2)
 
     ! prefill neighbour_faces
-    neighbour_faces(1, :) = 4
+    neighbour_faces(1, :) = - 1
     neighbour_faces(2, :) = - 1
     neighbour_faces(3, :) = - 1
-    neighbour_faces(4, :) = 1
+    neighbour_faces(4, :) = - 1
 
     ! first slice
     prism_idx = 1
@@ -192,8 +192,10 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
             call connect_prisms(prism_idx, prism_idx, verts, neighbours, neighbour_faces)
 
             ! connect with prisms in neighbouring slices
-            neighbours(1, tetra_idx) = tetra_idx + tetras_per_slice
-            neighbours(4, tetra_idx + 2) = tetra_idx - tetras_per_slice
+            neighbours(4, tetra_idx) = tetra_idx + 2 - tetras_per_slice
+            neighbour_faces(4, tetra_idx) = 1
+            neighbours(1, tetra_idx + 2) = tetra_idx + tetras_per_slice
+            neighbour_faces(1, tetra_idx + 2) = 4
 
             ! connect with previous prism in the same ring
             if (.not. segment == 1) then
@@ -257,6 +259,8 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     call wrap_idx_inplace(neighbours(:, 1:tetras_per_slice), n_tetras)
 
     do slice = 1, n_slices - 1 ! slice is the 0-based index of the slice
+        tetra_idx = 1 + slice * tetras_per_slice
+
         neighbour_faces(:, tetra_idx:tetra_idx + tetras_per_slice - 1) = neighbour_faces(:, 1:tetras_per_slice)
     end do
     
@@ -399,28 +403,40 @@ program test
       
     integer, allocatable, dimension(:, :) :: v, n, nf
     double precision, allocatable, dimension(:, :) :: points
-    integer :: n_tetras, n_points, i
+    integer :: n_tetras, n_points, i, f
     
     integer :: n_slices = 3
-    !integer, dimension(3) :: vps = (/6, 9, 12/)
-    integer, dimension(3) :: vps
-    vps = (/(i, i=6, 6 + size(vps) * 2 - 1, 2)/)
+    !integer, dimension(3) :: vpr = (/6, 9, 12/)
+    integer, dimension(3) :: vpr
+    vpr = (/(i, i=6, 6 + size(vpr) * 2 - 1, 2)/)
 
-    n_tetras = calc_n_tetras(vps, n_slices)
-    n_points = calc_n_verts(vps, n_slices)
+    n_tetras = calc_n_tetras(vpr, n_slices)
+    n_points = calc_n_verts(vpr, n_slices)
 
     allocate(v(4, n_tetras))
     allocate(n(4, n_tetras))
     allocate(nf(4, n_tetras))
     allocate(points(3, n_points))
 
-    call calc_points(vps, n_slices, 171.d0, 96.d0, 0.d0, points)
-    call calc_mesh(vps, n_slices, points(:, :n_points / n_slices), v, n, nf)
+    call calc_points(vpr, n_slices, 171.d0, 96.d0, 0.d0, points)
+    call calc_mesh(vpr, n_slices, points(:, :n_points / n_slices), v, n, nf)
     !do i = 1, size(points, 2)
     !    print *, i, points(:, i)
     !end do
-    !do i = 1, size(v, 2)
-    !    print *, v(:, i)
-    !    if (mod(i, 3) == 0) print *,
-    !end do
+    ! simple consistency check
+
+    do i = 1, size(v, 2)
+        do f = 1, 4
+            if (.not. (n(f, i) == -1 .and. nf(f, i) == -1)) then
+                if (.not. n(nf(f, i), n(f, i)) == i) then
+                    print *, "!!! CONCISTENCY CHECK FAILED, MESH IS BROKEN !!!"
+                    stop
+                end if
+            end if
+        end do
+        !print *, v(:, i)
+        !if (mod(i, 3) == 0) print *,
+    end do
+    print *, "consistency check ok"
 end program test
+
