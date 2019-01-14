@@ -57,7 +57,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     integer, allocatable, dimension(:) :: bottom_prisms
 
     integer :: n_tetras, n_rings, n_verts, verts_per_slice, tetras_per_slice, &
-               mask_idx, prev_ring_verts, prism_orientation, &
+               mask_idx, n_verts_lower, n_verts_upper, prism_orientation, &
                slice, ring, segment, base_idx, prism_idx, tetra_idx, lower_off, upper_off, i
 
     double precision, dimension(2) :: u, v, p, q
@@ -145,23 +145,30 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     do ring = 1, n_rings
         upper_off = 0
         lower_off = 0
+        n_verts_upper = verts_per_ring(ring)
         
         if (ring == 1) then
-            prev_ring_verts = 1
+            n_verts_lower = 1
         else
-            prev_ring_verts = verts_per_ring(ring - 1)
+            n_verts_lower = verts_per_ring(ring - 1)
         end if
 
         do segment = 1, prisms_per_ring(ring)
 
-            ! --- calculate mask stuff ---
-            if (verts_per_ring(ring) == prev_ring_verts) then
+            ! --- calculate prism orientation ---
+            if (verts_per_ring(ring) == n_verts_lower) then
                 prism_orientation = mod((segment - 1), 2)
+            else if (lower_off > n_verts_lower) then
+                ! prevent misaligned rings when all four points at first and last segment share an incircle
+                prism_orientation = 0
+            else if (upper_off > n_verts_upper) then
+                ! prevent misaligned rings when all four points at first and last segment share an incircle
+                prism_orientation = 1
             else
-                u = points((/1, 3/), base_idx + modulo(lower_off, prev_ring_verts))
-                v = points((/1, 3/), base_idx + prev_ring_verts + modulo(upper_off, verts_per_ring(ring)))
-                p = points((/1, 3/), base_idx + prev_ring_verts + modulo(upper_off + 1, verts_per_ring(ring)))
-                q = points((/1, 3/), base_idx + modulo(lower_off + 1, prev_ring_verts))
+                u = points((/1, 3/), base_idx + modulo(lower_off, n_verts_lower))
+                v = points((/1, 3/), base_idx + n_verts_lower + modulo(upper_off, n_verts_upper))
+                p = points((/1, 3/), base_idx + n_verts_lower + modulo(upper_off + 1, n_verts_upper))
+                q = points((/1, 3/), base_idx + modulo(lower_off + 1, n_verts_lower))
 
                 if (ring == 1 .or. delaunay_condition(u, v, p, q, .true.)) then
                     ! triangle 0, 2, 3 satisfies delaunay condition => prism is up facing
@@ -172,23 +179,22 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
                 end if
             end if
             
+            ! --- get the correct offset masks for up- or doen facing prism ---
             mask_idx = 1 + prism_orientation * 3
 
-            ! --- with masks calculate verts ---
             slice_offset = mask_phi(:, mask_idx:mask_idx + 2) * verts_per_slice
             ring_offset = mask_r(:, mask_idx:mask_idx + 2)
             segment_offset = mask_theta(:, mask_idx:mask_idx + 2)
 
-            where (ring_offset /= 0) segment_offset = modulo(segment_offset + upper_off, verts_per_ring(ring))
-            where (ring_offset == 0) segment_offset = modulo(segment_offset + lower_off, prev_ring_verts)
-            ring_offset = ring_offset * prev_ring_verts
+            ! --- with offset masks calculate verts ---
+            where (ring_offset /= 0) segment_offset = modulo(segment_offset + upper_off, n_verts_upper)
+            where (ring_offset == 0) segment_offset = modulo(segment_offset + lower_off, n_verts_lower)
+            ring_offset = ring_offset * n_verts_lower
 
             verts(:, tetra_idx:tetra_idx + 2) = base_idx + slice_offset + ring_offset + segment_offset
 
-            !print *, prism_idx, mask_idx, "|", verts(:, tetra_idx:tetra_idx + 2)
-
-            ! --- connect ---
-            ! connect neighbours tetras in this prism
+            ! --- connect neighbouring tetras  ---
+            ! connect neighbouring tetras in this prism
             call connect_prisms(prism_idx, prism_idx, verts, neighbours, neighbour_faces)
 
             ! connect with prisms in neighbouring slices
@@ -204,7 +210,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
 
             ! --- increment ---
             if (prism_orientation == 0) then ! top facing prism \/
-                bottom_prisms(base_idx + (prev_ring_verts - 1) + upper_off) = prism_idx
+                bottom_prisms(base_idx + (n_verts_lower - 1) + upper_off) = prism_idx
                 upper_off = upper_off + 1
             else ! bottom facing prism /\
                 ! connect with prism on previous ring
@@ -221,7 +227,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
         ! connect first and last prism in ring
         call connect_prisms(prism_idx - 1, prism_idx - prisms_per_ring(ring), verts, neighbours, neighbour_faces)
 
-        base_idx = base_idx + prev_ring_verts
+        base_idx = base_idx + n_verts_lower
 
     end do
 
@@ -268,9 +274,6 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     where (neighbour_faces == -1)
         neighbours = -1
     end where
-
-    print *, "finished"
-    print *, "tetra_idx after finishing:", tetra_idx
 
 end subroutine calc_mesh
 
