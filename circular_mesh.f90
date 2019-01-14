@@ -155,8 +155,6 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
         do segment = 1, prisms_per_ring(ring)
 
             ! --- calculate mask stuff ---
-            ! u, v, p ,q = 0, 2, 3, 1
-
             if (verts_per_ring(ring) == prev_ring_verts) then
                 prism_orientation = mod((segment - 1), 2)
             else
@@ -197,7 +195,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
             neighbours(1, tetra_idx) = tetra_idx + tetras_per_slice
             neighbours(4, tetra_idx + 2) = tetra_idx - tetras_per_slice
 
-            ! connect with previous prism on ring
+            ! connect tetraeders in this prism
             if (.not. segment == 1) then
                 call connect_prisms(prism_idx, prism_idx - 1, verts, neighbours, neighbour_faces)
             end if
@@ -333,7 +331,7 @@ subroutine connect_prisms(prism_1_idx, prism_2_idx, verts, neighbours, neighbour
     integer, dimension(:, :), intent(out) :: neighbours, neighbour_faces
 
     integer :: tetra_1_base, tetra_2_base, tetra_1_idx, tetra_2_idx, tetra_1_off, tetra_2_off, &
-               face_idx_1, face_idx_2, i
+               tetra_1_face, tetra_2_face, i
     
     logical, dimension(4) :: same_vert_1, same_vert_2
     integer :: deleteme
@@ -347,7 +345,7 @@ subroutine connect_prisms(prism_1_idx, prism_2_idx, verts, neighbours, neighbour
         do tetra_2_off = 0, 2
             tetra_2_idx = tetra_2_base + tetra_2_off
 
-            if (tetra_1_idx == tetra_2_idx) cycle ! so we can use this method for inner connections of a prism
+            if (tetra_1_idx == tetra_2_idx) cycle
 
             do i = 1, 4
                 same_vert_1(i) = any(verts(:, tetra_2_idx) == verts(i, tetra_1_idx))
@@ -355,14 +353,14 @@ subroutine connect_prisms(prism_1_idx, prism_2_idx, verts, neighbours, neighbour
             end do
 
             if (count(same_vert_1) == 3) then
-                face_idx_1 = minloc(transfer(same_vert_1 , 1, size=4), dim=1)
-                face_idx_2 = minloc(transfer(same_vert_2 , 1, size=4), dim=1)
+                tetra_1_face = minloc(transfer(same_vert_1 , 1, size=4), dim=1)
+                tetra_2_face = minloc(transfer(same_vert_2 , 1, size=4), dim=1)
 
-                neighbours(face_idx_1, tetra_1_idx) = tetra_2_idx
-                neighbours(face_idx_2, tetra_2_idx) = tetra_1_idx
+                neighbours(tetra_1_face, tetra_1_idx) = tetra_2_idx
+                neighbours(tetra_2_face, tetra_2_idx) = tetra_1_idx
 
-                neighbour_faces(face_idx_1, tetra_1_idx) = face_idx_2
-                neighbour_faces(face_idx_2, tetra_2_idx) = face_idx_1
+                neighbour_faces(tetra_1_face, tetra_1_idx) = tetra_2_face
+                neighbour_faces(tetra_2_face, tetra_2_idx) = tetra_1_face
 
                 deleteme = deleteme + 1
             end if
