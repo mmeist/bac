@@ -195,7 +195,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
             neighbours(1, tetra_idx) = tetra_idx + tetras_per_slice
             neighbours(4, tetra_idx + 2) = tetra_idx - tetras_per_slice
 
-            ! connect tetraeders in this prism
+            ! connect with previous prism in the same ring
             if (.not. segment == 1) then
                 call connect_prisms(prism_idx, prism_idx - 1, verts, neighbours, neighbour_faces)
             end if
