@@ -113,7 +113,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
         /), (/4, 3/))
     
     ! calculate the bottom facing prism tetraeder configurations from the top facing one one
-    ! bottom facing prism \/
+    ! bottom facing prism /\
     tetra_conf(:, 4:) = tetra_conf(:, :3)
     where (iand(tetra_conf(:, 4:) , 2) > 0)
         tetra_conf(:, 4:) = ieor(tetra_conf(:, 4:) , 1)
@@ -132,8 +132,10 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     mask_r = ishft(iand(tetra_conf, 2), -1)
     mask_phi = ishft(iand(tetra_conf, 4), -2)
 
-    ! prefill neighbour_faces for slice facing faces , will be overwritten if it is not slice facing
+    ! prefill neighbour_faces
     neighbour_faces(1, :) = 4
+    neighbour_faces(2, :) = - 1
+    neighbour_faces(3, :) = - 1
     neighbour_faces(4, :) = 1
 
     ! first slice
@@ -259,8 +261,11 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     do slice = 1, n_slices - 1 ! slice is the 0-based index of the slice
         neighbour_faces(:, tetra_idx:tetra_idx + tetras_per_slice - 1) = neighbour_faces(:, 1:tetras_per_slice)
     end do
-
-    ! TODO: remove outer faces after modulo operation
+    
+    ! remove outer faces after modulo operation
+    where (neighbour_faces == -1)
+        neighbours = -1
+    end where
 
     print *, "finished"
     print *, "tetra_idx after finishing:", tetra_idx
@@ -286,7 +291,7 @@ pure function calc_n_tetras(verts_per_ring, n_slices) result(n_tetras)
 end function calc_n_tetras
 
 pure function delaunay_condition(u, v, p, q, fixed_order) result(valid)
-    ! check if the triangle a-b-c satisfies the delaunay condition with respect to point d
+    ! check if the triangle [u, v, p] satisfies the delaunay condition with respect to point q
     ! returns: 
     !   valid: .true. the triangle a-b-c satisfies the delaunay condition 
     !          .false. otherwise
