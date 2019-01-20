@@ -74,11 +74,11 @@ subroutine extrude_points(verts_per_slice, n_slices,  points)
     end do
 end subroutine
 
-subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighbour_faces)
+subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighbour_faces, perbou)
     integer, intent(in) :: n_slices
     integer, dimension(:), intent(in) :: verts_per_ring! without venter vert; e.g. (/6, 8, 10/)
     double precision, dimension(:, :), intent(in) :: points !points in first (r, phi, z) 
-    integer, dimension(:, :), intent(out) :: verts, neighbours, neighbour_faces
+    integer, dimension(:, :), intent(out) :: verts, neighbours, neighbour_faces, perbou
 
     integer, dimension(4 , 6) :: tetra_conf, mask_theta, mask_phi, mask_r
     integer, dimension(4, 3) :: slice_offset, ring_offset, segment_offset
@@ -162,10 +162,7 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
     mask_phi = ishft(iand(tetra_conf, 4), -2)
 
     ! prefill neighbour_faces
-    neighbour_faces(1, :) = - 1
-    neighbour_faces(2, :) = - 1
-    neighbour_faces(3, :) = - 1
-    neighbour_faces(4, :) = - 1
+    neighbour_faces = - 1
 
     ! first slice
     prism_idx = 1
@@ -304,6 +301,11 @@ subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighb
         neighbours = -1
     end where
 
+    ! periodic boundary
+    perbou = 0
+    perbou(4, :tetras_per_slice:3) = -1
+    perbou(1, n_tetras - tetras_per_slice + 2:3) = 1
+
 end subroutine calc_mesh
 
 pure function calc_n_verts(verts_per_ring, n_slices) result(n_verts)
@@ -421,7 +423,7 @@ program test
     use circular_mesh, only: calc_mesh, calc_points_spherical, calc_n_tetras, calc_n_verts
     implicit none
       
-    integer, allocatable, dimension(:, :) :: v, n, nf
+    integer, allocatable, dimension(:, :) :: v, n, nf, pb
     double precision, allocatable, dimension(:, :) :: points
     integer :: n_tetras, n_points, i, f
     
@@ -436,10 +438,11 @@ program test
     allocate(v(4, n_tetras))
     allocate(n(4, n_tetras))
     allocate(nf(4, n_tetras))
+    allocate(pb(4, n_tetras))
     allocate(points(3, n_points))
 
     call calc_points_spherical(vpr, n_slices, 171.d0, 96.d0, 0.d0, points)
-    call calc_mesh(vpr, n_slices, points(:, :n_points / n_slices), v, n, nf)
+    call calc_mesh(vpr, n_slices, points(:, :n_points / n_slices), v, n, nf, pb)
     !do i = 1, size(points, 2)
     !    print *, i, points(:, i)
     !end do
