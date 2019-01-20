@@ -1,20 +1,39 @@
 module circular_mesh
 implicit none
-private :: delaunay_condition, connect_prisms, wrap_idx, wrap_idx_inplace
-public :: calc_mesh, calc_points, calc_n_tetras, calc_n_verts
+private :: delaunay_condition, connect_prisms, wrap_idx, wrap_idx_inplace, &
+           extrude_points
+double precision, parameter :: pi = 3.14159265358979d0
+
+public :: calc_mesh, calc_points_spherical, calc_n_tetras, calc_n_verts
 
 contains
 
-subroutine calc_points(verts_per_ring, n_slices, R0, Rmax, Z0,  points)
-    double precision, parameter :: pi = 3.14159265358979d0
+!subroutine calc_points (verts_per_ring, n_slices, points)
+!    use axis_mod, only: axis, default_theta_scaling
+!
+!    integer, intent(in) :: n_slices
+!    integer, dimension(:), intent(in) :: verts_per_ring ! without venter vert; e.g. (/6, 8, 10/)
+!    double precision, dimension(:, :), intent(out) :: points !(r, phi, z)
+!
+!    integer :: n_verts, verts_per_slice
+!
+!    n_verts = calc_n_verts(verts_per_ring, n_slices)
+!    verts_per_slice = n_verts / n_slices
+!
+!    call axis(verts_per_ring, default_theta_scaling, points(:, :verts_per_slice))
+!    call extrude_points(verts_per_slice, n_slices, points)
+!
+!end subroutine calc_points
+
+subroutine calc_points_spherical(verts_per_ring, n_slices, R0, Rmax, Z0,  points)
 
     double precision, intent(in) :: R0, Z0, Rmax
     integer, intent(in) :: n_slices
     integer, dimension(:), intent(in) :: verts_per_ring ! without venter vert; e.g. (/6, 8, 10/)
     double precision, dimension(:, :), intent(out) :: points !(r, phi, z)
 
-    integer :: vert, ring, slice, n_rings, n_verts, verts_per_slice, vert_idx
-    double precision :: r, theta, phi
+    integer :: vert, ring, n_rings, n_verts, verts_per_slice, vert_idx
+    double precision :: r, theta
 
     n_rings = size(verts_per_ring)
     n_verts = calc_n_verts(verts_per_ring, n_slices)
@@ -35,6 +54,17 @@ subroutine calc_points(verts_per_ring, n_slices, R0, Rmax, Z0,  points)
     points(1, :verts_per_slice) = points(1, :verts_per_slice) + R0
     points(3, :verts_per_slice) = points(3, :verts_per_slice) + Z0
 
+    call extrude_points(verts_per_slice, n_slices, points)
+
+end subroutine calc_points_spherical
+
+subroutine extrude_points(verts_per_slice, n_slices,  points)
+    integer, intent(in) :: verts_per_slice, n_slices
+    double precision, dimension(:, :), intent(inout) :: points !(r, phi, z)
+
+    integer :: slice, vert_idx
+    double precision :: phi
+
     ! copy and rotate slice
     do slice = 2, n_slices
         vert_idx = (slice- 1) * verts_per_slice + 1
@@ -42,8 +72,7 @@ subroutine calc_points(verts_per_ring, n_slices, R0, Rmax, Z0,  points)
         points(:, vert_idx:vert_idx + verts_per_slice - 1) = points(:, 1:verts_per_slice)
         points(2, vert_idx:vert_idx + verts_per_slice - 1) = phi
     end do
-
-end subroutine calc_points
+end subroutine
 
 subroutine calc_mesh(verts_per_ring, n_slices, points, verts, neighbours, neighbour_faces)
     integer, intent(in) :: n_slices
@@ -341,12 +370,10 @@ subroutine connect_prisms(prism_1_idx, prism_2_idx, verts, neighbours, neighbour
                tetra_1_face, tetra_2_face, i
     
     logical, dimension(4) :: same_vert_1, same_vert_2
-    integer :: deleteme
 
     tetra_1_base = (prism_1_idx - 1) * 3 + 1
     tetra_2_base = (prism_2_idx - 1) * 3 + 1
 
-    deleteme = 0
     do tetra_1_off = 0, 2
         tetra_1_idx = tetra_1_base + tetra_1_off
         do tetra_2_off = 0, 2
@@ -368,19 +395,9 @@ subroutine connect_prisms(prism_1_idx, prism_2_idx, verts, neighbours, neighbour
 
                 neighbour_faces(tetra_1_face, tetra_1_idx) = tetra_2_face
                 neighbour_faces(tetra_2_face, tetra_2_idx) = tetra_1_face
-
-                deleteme = deleteme + 1
             end if
         end do
     end do
-
-    if (deleteme < 2) then
-        print *, "--- <2 match!!!", tetra_1_base, tetra_2_base, "prism", prism_1_idx, prism_2_idx, tetra_1_idx
-        print *, "                ", verts(:, tetra_1_base:tetra_1_base + 2)
-        print *, "                ", verts(:, tetra_2_base:tetra_2_base + 2)
-        print *, "---"
-        
-    end if
 
 end subroutine connect_prisms
 
@@ -401,7 +418,7 @@ end subroutine wrap_idx_inplace
 end module circular_mesh
 
 program test
-    use circular_mesh, only: calc_mesh, calc_points, calc_n_tetras, calc_n_verts
+    use circular_mesh, only: calc_mesh, calc_points_spherical, calc_n_tetras, calc_n_verts
     implicit none
       
     integer, allocatable, dimension(:, :) :: v, n, nf
@@ -421,7 +438,7 @@ program test
     allocate(nf(4, n_tetras))
     allocate(points(3, n_points))
 
-    call calc_points(vpr, n_slices, 171.d0, 96.d0, 0.d0, points)
+    call calc_points_spherical(vpr, n_slices, 171.d0, 96.d0, 0.d0, points)
     call calc_mesh(vpr, n_slices, points(:, :n_points / n_slices), v, n, nf)
     !do i = 1, size(points, 2)
     !    print *, i, points(:, i)

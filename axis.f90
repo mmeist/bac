@@ -23,7 +23,7 @@ subroutine axis(nt_core, theta_scaling_func, points)
   END interface
 
   integer, dimension(:), intent(in) :: nt_core
-  double precision, dimension(:, :), intent(out) :: points !
+  double precision, dimension(:, :), intent(out) :: points ! (R, phi, Z)
 
   integer, parameter :: iterat=200
 
@@ -124,9 +124,9 @@ subroutine axis(nt_core, theta_scaling_func, points)
     end do
   end do
 
-  points(1, :) = R_coord
-  points(2, :) = Z_coord
-  points(3, :) = 0.d0
+  points(1, :) = R_coord ! R
+  points(2, :) = 0.d0    ! phi
+  points(3, :) = Z_coord ! Z
 
   !open(212,file='points.fmt')
   !do point_idx = 1, n_points
